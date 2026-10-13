@@ -103,10 +103,46 @@ fn lookup(lang: usize, key: &str) -> Option<&'static Text> {
 /// The UI string for `key` (its English text) in the current language. One English text that needs
 /// two translations gets a context after `|` ("Fill|sizing"); the English catalog maps it back.
 pub fn tr(key: &str) -> &str {
-    match lookup(CURRENT.load(Ordering::Relaxed), key) {
+    branded(match lookup(CURRENT.load(Ordering::Relaxed), key) {
         Some(Text::Plain(s) | Text::Plural(_, s)) => s,
         None => key,
+    })
+}
+
+/// The product name a host program shows instead of "FigCraft" ([`set_product_name`]).
+static PRODUCT: std::sync::OnceLock<&'static str> = std::sync::OnceLock::new();
+
+/// Interface strings with the product name put in, made once each.
+static BRANDED: std::sync::Mutex<Vec<(String, &'static str)>> = std::sync::Mutex::new(Vec::new());
+
+/// A program that embeds the design editor under its own name: every interface string says `name`
+/// where it would say "FigCraft". Set once, before the first frame; later calls are ignored.
+pub fn set_product_name(name: &'static str) {
+    let _ = PRODUCT.set(name);
+}
+
+/// The product name the interface shows ("FigCraft" unless a host set another).
+pub fn product() -> &'static str {
+    PRODUCT.get().copied().unwrap_or("FigCraft")
+}
+
+/// `s` with the host's product name in place of "FigCraft" (unchanged without one).
+fn branded(s: &str) -> &str {
+    let Some(name) = PRODUCT.get() else { return s };
+    if !s.contains("FigCraft") {
+        return s;
     }
+    let Ok(mut cache) = BRANDED.lock() else { return s };
+    if let Some((_, b)) = cache.iter().find(|(k, _)| k == s) {
+        return b;
+    }
+    // A bounded set: only the few interface strings that name the product.
+    if cache.len() >= 256 {
+        return s;
+    }
+    let b: &'static str = Box::leak(s.replace("FigCraft", name).into_boxed_str());
+    cache.push((s.to_owned(), b));
+    b
 }
 
 /// Mark a key for the catalog where the lookup happens later (`tr(label)` at display time), e.g. in
@@ -128,6 +164,7 @@ pub fn trn(key: &str, n: usize, args: &[(&str, &dyn Display)]) -> String {
         Some(Text::Plain(s)) => s,
         None => key,
     };
+    let text = branded(text);
     let mut all: Vec<(&str, &dyn Display)> = vec![("n", &n)];
     all.extend_from_slice(args);
     fill(text, &all)
@@ -186,9 +223,9 @@ pub fn menu_item<'a>(id: &str, english: &'a str) -> Cow<'a, str> {
 fn label<'a>(menu: bool, id: &str, english: &'a str) -> Cow<'a, str> {
     let text = chain(CURRENT.load(Ordering::Relaxed)).find_map(|l| menu.then(|| find(l.menu, id)).flatten().or_else(|| find(l.commands, id)));
     match text {
-        Some(Text::Plain(s) | Text::Plural(_, s)) if english.ends_with('…') && !s.ends_with('…') => Cow::Owned(format!("{s}…")),
-        Some(Text::Plain(s) | Text::Plural(_, s)) => Cow::Borrowed(s),
-        None => Cow::Borrowed(english),
+        Some(Text::Plain(s) | Text::Plural(_, s)) if english.ends_with('…') && !s.ends_with('…') => Cow::Owned(format!("{}…", branded(s))),
+        Some(Text::Plain(s) | Text::Plural(_, s)) => Cow::Borrowed(branded(s)),
+        None => Cow::Borrowed(branded(english)),
     }
 }
 

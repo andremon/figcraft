@@ -857,6 +857,14 @@ impl FigApp {
         need
     }
 
+    /// Installs the interface fonts again on the next frame (which then draws nothing, as the
+    /// first frame does). A host that shares its window with the editor and puts its own look back
+    /// while the editor is hidden calls this when it is shown again.
+    pub fn restyle(&mut self) {
+        self.fonts_installed = false;
+        self.script_fonts = None;
+    }
+
     /// Per-frame logic that doesn't draw (control requests, theme, language).
     pub fn logic(&mut self, ctx: &egui::Context) {
         if self.language.as_ref() != Some(&self.session.prefs.language) {
