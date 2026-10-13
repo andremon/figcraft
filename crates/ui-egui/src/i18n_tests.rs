@@ -407,3 +407,13 @@ fn the_language_preference_takes_language_codes() {
         assert!(s.execute("pref.language", &serde_json::json!({"language": bad})).is_err(), "{bad:?}");
     }
 }
+
+#[test]
+fn norwegian_tags_read_the_bokmal_catalog() {
+    let code = |pref: &str, system: Option<&str>| LANGS[resolve(pref, system)].code;
+    for tag in ["nb", "nb-NO", "nb_NO.UTF-8", "no", "no-NO", "nn-NO"] {
+        assert_eq!(code("system", Some(tag)), "nb", "{tag}");
+    }
+    let nb = resolve("nb", None);
+    assert!(matches!(lookup(nb, "Add auto layout"), Some(Text::Plain("Legg til auto layout"))));
+}

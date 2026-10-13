@@ -81,6 +81,8 @@ fn resolve_one(want: &str) -> Option<usize> {
     }
     let find = |t: &str| LANGS.iter().position(|l| l.code.eq_ignore_ascii_case(t));
     let alias = (base.eq_ignore_ascii_case("es") && has(LATIN_AMERICA)).then(|| find("es-419")).flatten();
+    // Norwegian: the Bokmål catalog serves `no` (the macrolanguage) and Nynorsk `nn` alike.
+    let alias = alias.or_else(|| (base.eq_ignore_ascii_case("no") || base.eq_ignore_ascii_case("nn")).then(|| find("nb")).flatten());
     let regional = || LANGS.iter().position(|l| !base.is_empty() && l.code.split('-').next().is_some_and(|b| b.eq_ignore_ascii_case(base)));
     alias.or_else(|| find(&tag)).or_else(|| find(base)).or_else(regional).filter(|i| LANGS.get(*i).is_some_and(|l| crate::cjk::can_show(l.code)))
 }
